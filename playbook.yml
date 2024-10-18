@@ -1,0 +1,59 @@
+---
+- name: Configurar VPN no Ubuntu
+  become: true
+  hosts: all
+  vars:
+    vpn_user: "testuser"
+    vpn_password: "testpassword"
+
+  tasks:
+    - name: Atualizar pacotes
+      apt:
+        update_cache: yes
+        upgrade: dist
+
+    - name: Instalar OpenVPN
+      apt:
+        name: openvpn
+        state: present
+
+    - name: Clonar repositório Easy-RSA
+      git:
+        repo: https://github.com/OpenVPN/easy-rsa.git
+        dest: /home/ubuntu/openvpn-ca
+        version: master
+
+    - name: Criar diretório CA se não existir
+      file:
+        path: /home/ubuntu/openvpn-ca
+        state: directory
+
+    - name: Criar arquivo de configuração do servidor
+      template:
+        src: ./files/server.conf.j2
+        dest: /etc/openvpn/server.conf
+
+    - name: Habilitar e iniciar o serviço OpenVPN
+      systemd:
+        name: openvpn@server
+        state: started
+        enabled: yes
+
+    - name: Adicionar usuário à autenticação
+      user:
+        name: "{{ vpn_user }}"
+        password: "{{ vpn_password | password_hash('sha512') }}"
+        shell: /bin/false
+
+    - name: Criar arquivo de autenticação
+      lineinfile:
+        path: /etc/openvpn/credentials.txt
+        line: "{{ vpn_user }} {{ vpn_password }}"
+        create: yes
+
+    - name: Configurar permissões
+      file:
+        path: /etc/openvpn/credentials.txt
+        owner: root
+        group: root
+        mode: '0600'
